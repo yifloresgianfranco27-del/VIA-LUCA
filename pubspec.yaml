@@ -1,5 +1,5 @@
 name: via_luca
-description: "Aplicación de movilidad y transporte VIA LUCA"
+description: "Aplicación de movilidad VIA LUCA"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -13,9 +13,8 @@ dependencies:
   google_maps_flutter: ^2.5.0
   geolocator: ^10.1.0
   http: ^1.1.0
-flutter_map: ^6.1.0
+  flutter_map: ^6.1.0
   latlong2: ^0.9.1
-  socket_io_client: ^2.0.3+1
 
 dev_dependencies:
   flutter_test:
