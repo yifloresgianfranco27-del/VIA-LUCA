@@ -40,22 +40,42 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
   
-  // Coordenadas iniciales (Centro de Ica)
   LatLng _currentPosition = const LatLng(-14.0678, -75.7286);
   LatLng? _destinationPosition;
   String _destinationName = '¿A dónde vamos en Ica?';
   bool _isLoadingGps = true;
+  
+  // Variables para la tarifa calculada
+  double _estimatedPrice = 0.0;
+  double _estimatedDistanceKm = 0.0;
 
-  // Límites geográficos estrictos para la Región de Ica
   final LatLngBounds _icaBounds = LatLngBounds(
-    const LatLng(-15.6000, -76.5000), // Suroeste de Ica
-    const LatLng(-13.0000, -74.7000), // Noreste de Ica
+    const LatLng(-15.6000, -76.5000),
+    const LatLng(-13.0000, -74.7000),
   );
 
   @override
   void initState() {
     super.initState();
     _initGpsTracking();
+  }
+
+  // Función matemática para calcular la tarifa en soles (PEN)
+  double _calculateFare({required double distanceInKm}) {
+    double baseFare = 5.00;
+    double costPerKm = 1.50;
+    double minimumFare = 6.00;
+
+    double extraKm = (distanceInKm > 1.0) ? (distanceInKm - 1.0) : 0.0;
+    double total = baseFare + (extraKm * costPerKm);
+
+    // Recargo nocturno (10:00 PM a 5:00 AM)
+    int currentHour = DateTime.now().hour;
+    if (currentHour >= 22 || currentHour < 5) {
+      total += 2.00;
+    }
+
+    return total < minimumFare ? minimumFare : total;
   }
 
   void _animatedMapMove(LatLng destLocation, double destZoom) {
@@ -125,7 +145,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     LatLng userLatLng = LatLng(position.latitude, position.longitude);
 
-    // Verificar si el usuario está dentro de Ica
     if (_icaBounds.contains(userLatLng)) {
       setState(() {
         _currentPosition = userLatLng;
@@ -155,9 +174,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
 
     if (result != null && result is Map<String, dynamic>) {
+      LatLng dest = result['location'] as LatLng;
+      
+      // Calcular distancia en metros entre origen y destino
+      double distanceInMeters = Geolocator.distanceBetween(
+        _currentPosition.latitude,
+        _currentPosition.longitude,
+        dest.latitude,
+        dest.longitude,
+      );
+
+      double distanceInKm = distanceInMeters / 1000.0;
+      double fare = _calculateFare(distanceInKm: distanceInKm);
+
       setState(() {
-        _destinationPosition = result['location'] as LatLng;
+        _destinationPosition = dest;
         _destinationName = result['name'] as String;
+        _estimatedDistanceKm = distanceInKm;
+        _estimatedPrice = fare;
       });
 
       _animatedMapMove(_destinationPosition!, 15.5);
@@ -222,7 +256,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       body: Stack(
         children: [
-          // Mapa OpenStreetMap Limpio (Sin marcas de agua) + Bloqueo regional en Ica
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -394,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
           Positioned(
             right: 16,
-            bottom: 210,
+            bottom: _destinationPosition == null ? 210 : 280,
             child: FloatingActionButton(
               heroTag: 'gps_btn',
               onPressed: () => _animatedMapMove(_currentPosition, 16.5),
@@ -405,6 +438,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
 
+          // Tarjeta Inferior
           Positioned(
             left: 16,
             right: 16,
@@ -458,26 +492,102 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildQuickButton(
-                          icon: Icons.home_rounded,
-                          label: 'Casa',
-                          onTap: _openSearchScreen,
+
+                  // Si se seleccionó destino, muestra la tarifa estimada
+                  if (_destinationPosition != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F62FE).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF0F62FE).withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Tarifa estimada',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                '${_estimatedDistanceKm.toStringAsFixed(1)} km aprox.',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.black45,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            'S/ ${_estimatedPrice.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F62FE),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Buscando un conductor VIA LUCA...'),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F62FE),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'SOLICITAR VIA LUCA',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildQuickButton(
-                          icon: Icons.work_rounded,
-                          label: 'Trabajo',
-                          onTap: _openSearchScreen,
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickButton(
+                            icon: Icons.home_rounded,
+                            label: 'Casa',
+                            onTap: _openSearchScreen,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildQuickButton(
+                            icon: Icons.work_rounded,
+                            label: 'Trabajo',
+                            onTap: _openSearchScreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -520,7 +630,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 }
 
-// Pantalla de Búsqueda enfocada exclusivamente en Ica
 class DestinationSearchScreen extends StatefulWidget {
   final LatLng userPosition;
   const DestinationSearchScreen({super.key, required this.userPosition});
@@ -549,7 +658,6 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
     });
 
     try {
-      // Se limita la búsqueda con viewbox a la Región de Ica (&bounded=1)
       final url = Uri.parse(
         'https://nominatim.openstreetmap.org/search?format=json&q=$query, Ica, Peru&viewbox=-76.5,-13.0,-74.7,-15.6&bounded=1&limit=8&addressdetails=1',
       );
@@ -682,14 +790,13 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
   }
 }
 
-// Isotipo y Logo Vectorial
 class ViaLucaLogo extends StatelessWidget {
   final double size;
   final bool showText;
   final Color textColor;
 
   const ViaLucaLogo({
-    super.key,
+    super.size,
     this.size = 28.0,
     this.showText = true,
     this.textColor = const Color(0xFF001141),
