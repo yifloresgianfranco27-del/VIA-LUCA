@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() {
   runApp(const ViaLucaApp());
@@ -13,11 +15,7 @@ class ViaLucaApp extends StatelessWidget {
       title: 'VIA LUCA',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E88E5), // Azul principal VIA LUCA
-          primary: const Color(0xFF1E88E5),
-          secondary: const Color(0xFFFFB300),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
       home: const HomeScreen(),
@@ -25,8 +23,16 @@ class ViaLucaApp extends StatelessWidget {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // Coordenadas iniciales (Ica, Perú)
+  final LatLng _initialPosition = const LatLng(-14.0678, -75.7286);
 
   @override
   Widget build(BuildContext context) {
@@ -34,46 +40,56 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'VIA LUCA',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none),
             onPressed: () {},
-          )
+          ),
         ],
       ),
       body: Stack(
         children: [
-          // Área reservada para el Mapa
-          Container(
-            color: Colors.grey[200],
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.map_outlined, size: 80, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text(
-                    'Cargando Mapa de VIA LUCA...',
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
+          // Mapa Interactivo de OpenStreetMap
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: _initialPosition,
+              initialZoom: 14.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.via_luca',
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: _initialPosition,
+                    width: 40,
+                    height: 40,
+                    child: const Icon(
+                      Icons.location_on,
+                      color: Colors.red,
+                      size: 40,
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
 
-          // Tarjeta flotante inferior para solicitar viaje
+          // Tarjeta inferior flotante
           Positioned(
-            bottom: 20,
-            left: 15,
-            right: 15,
+            left: 16,
+            right: 16,
+            bottom: 24,
             child: Card(
-              elevation: 8,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
+              elevation: 4,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -86,21 +102,24 @@ class HomeScreen extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 15),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: const Color(0xFF1E88E5),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Acción para buscar destino
+                        },
+                        icon: const Icon(Icons.search),
+                        label: const Text('Ingresar destino'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                      onPressed: () {
-                        // Lógica para buscar destino
-                      },
-                      icon: const Icon(Icons.search),
-                      label: const Text('Ingresar destino'),
                     ),
                   ],
                 ),
