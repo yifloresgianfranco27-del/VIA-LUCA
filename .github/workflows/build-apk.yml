@@ -24,20 +24,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci || npm install
+      - name: Install Node dependencies
+        run: |
+          if [ -d "backend" ]; then
+            cd backend && npm install
+          elif [ -f "package.json" ]; then
+            npm install
+          fi
 
       - name: Build Android APK
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+          if [ -d "android" ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleRelease
+          else
+            echo "No se encontró el directorio android" && exit 1
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: VIA-LUCA-APK
           path: android/app/build/outputs/apk/release/*.apk
-
