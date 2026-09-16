@@ -20,31 +20,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          node-version: '18'
+          channel: 'stable'
 
-      - name: Install Node dependencies
-        run: |
-          if [ -d "backend" ]; then
-            cd backend && npm install
-          elif [ -f "package.json" ]; then
-            npm install
-          fi
+      - name: Install dependencies
+        run: flutter pub get
 
-      - name: Build Android APK
-        run: |
-          if [ -d "android" ]; then
-            cd android
-            chmod +x gradlew
-            ./gradlew assembleRelease
-          else
-            echo "No se encontró el directorio android" && exit 1
-          fi
+      - name: Build APK
+        run: flutter build apk --release
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: VIA-LUCA-APK
-          path: android/app/build/outputs/apk/release/*.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
