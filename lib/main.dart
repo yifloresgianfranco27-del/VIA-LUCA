@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(const ViaLucaApp());
@@ -38,12 +39,58 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final MapController _mapController = MapController();
-  final LatLng _currentPosition = const LatLng(-14.0678, -75.7286); // Parcona, Ica
+  LatLng _currentPosition = const LatLng(-14.0678, -75.7286); // Coordenada por defecto (Parcona)
   LatLng? _destinationPosition;
   String _destinationName = '¿A dónde vamos hoy?';
+  bool _isLoadingGps = true;
 
-  void _recenterMap() {
-    _mapController.move(_currentPosition, 15.5);
+  @override
+  void initState() {
+    super.initState();
+    _determinePosition();
+  }
+
+  // Obtener ubicación GPS precisa en tiempo real
+  Future<void> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() => _isLoadingGps = false);
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        setState(() => _isLoadingGps = false);
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      setState(() => _isLoadingGps = false);
+      return;
+    }
+
+    // Obtener coordenadas exactas con precisión alta
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    setState(() {
+      _currentPosition = LatLng(position.latitude, position.longitude);
+      _isLoadingGps = false;
+    });
+
+    _mapController.move(_currentPosition, 16.5);
+  }
+
+  void _recenterMap() async {
+    await _determinePosition();
+    _mapController.move(_currentPosition, 16.5);
   }
 
   void _openSearchScreen() async {
@@ -62,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _destinationName = result['name'] as String;
       });
 
-      _mapController.move(_destinationPosition!, 15.0);
+      _mapController.move(_destinationPosition!, 15.5);
     }
   }
 
@@ -129,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _currentPosition,
-              initialZoom: 15.0,
+              initialZoom: 16.5,
             ),
             children: [
               TileLayer(
@@ -151,25 +198,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
               MarkerLayer(
                 markers: [
-                  // Origen (Pulso azul)
+                  // Origen - Calibrado con centro exacto
                   Marker(
                     point: _currentPosition,
-                    width: 60,
-                    height: 60,
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
                         Container(
-                          width: 50,
-                          height: 50,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: const Color(0xFF0F62FE).withOpacity(0.2),
+                            color: const Color(0xFF0F62FE).withOpacity(0.25),
                           ),
                         ),
                         Container(
-                          width: 20,
-                          height: 20,
+                          width: 18,
+                          height: 18,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFF0F62FE),
@@ -177,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             boxShadow: const [
                               BoxShadow(
                                 color: Colors.black26,
-                                blurRadius: 6,
+                                blurRadius: 4,
                               )
                             ],
                           ),
@@ -186,33 +234,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Destino (Pin rojo)
+                  // Destino - Alineado desde la punta inferior (topCenter)
                   if (_destinationPosition != null)
                     Marker(
                       point: _destinationPosition!,
-                      width: 50,
-                      height: 50,
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: const BoxDecoration(
-                              color: Colors.black87,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black38,
-                                  blurRadius: 8,
-                                )
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.pin_drop,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        ],
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.topCenter,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Color(0xFFE53935),
+                        size: 40,
                       ),
                     ),
                 ],
@@ -220,7 +252,39 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          // Barra Superior Flotante con Logo Vectorial
+          // Indicador de carga de GPS
+          if (_isLoadingGps)
+            Positioned(
+              top: 100,
+              left: MediaQuery.of(context).size.width / 2 - 80,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Obteniendo GPS...',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Barra Superior Flotante
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -262,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Botón GPS
+          // Botón Mi Ubicación / Recalibrar GPS
           Positioned(
             right: 16,
             bottom: 210,
@@ -331,7 +395,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   Row(
                     children: [
                       Expanded(
@@ -469,7 +532,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Ubicación actual (Parcona, Ica)',
+                        'Mi ubicación actual',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
