@@ -49,7 +49,6 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 2,
-        scaffoldWillOpenDrawer: true,
         title: const Text(
           'VIA LUCA',
           style: TextStyle(
