@@ -37,31 +37,75 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
-  LatLng _currentPosition = const LatLng(-14.0678, -75.7286); // Coordenada por defecto (Parcona)
+  
+  // Coordenadas iniciales (Centro de Ica)
+  LatLng _currentPosition = const LatLng(-14.0678, -75.7286);
   LatLng? _destinationPosition;
-  String _destinationName = '¿A dónde vamos hoy?';
+  String _destinationName = '¿A dónde vamos en Ica?';
   bool _isLoadingGps = true;
+
+  // Límites geográficos estrictos para la Región de Ica
+  final LatLngBounds _icaBounds = LatLngBounds(
+    const LatLng(-15.6000, -76.5000), // Suroeste de Ica
+    const LatLng(-13.0000, -74.7000), // Noreste de Ica
+  );
 
   @override
   void initState() {
     super.initState();
-    _determinePosition();
+    _initGpsTracking();
   }
 
-  // Obtener ubicación GPS precisa en tiempo real
-  Future<void> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    final latTween = Tween<double>(
+      begin: _mapController.camera.center.latitude,
+      end: destLocation.latitude,
+    );
+    final lngTween = Tween<double>(
+      begin: _mapController.camera.center.longitude,
+      end: destLocation.longitude,
+    );
+    final zoomTween = Tween<double>(
+      begin: _mapController.camera.zoom,
+      end: destZoom,
+    );
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+
+    final Animation<double> animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.fastOutSlowIn,
+    );
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        controller.dispose();
+      }
+    });
+
+    controller.forward();
+  }
+
+  Future<void> _initGpsTracking() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       setState(() => _isLoadingGps = false);
       return;
     }
 
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
@@ -75,22 +119,29 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Obtener coordenadas exactas con precisión alta
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
 
-    setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      _isLoadingGps = false;
-    });
+    LatLng userLatLng = LatLng(position.latitude, position.longitude);
 
-    _mapController.move(_currentPosition, 16.5);
-  }
-
-  void _recenterMap() async {
-    await _determinePosition();
-    _mapController.move(_currentPosition, 16.5);
+    // Verificar si el usuario está dentro de Ica
+    if (_icaBounds.contains(userLatLng)) {
+      setState(() {
+        _currentPosition = userLatLng;
+        _isLoadingGps = false;
+      });
+      _animatedMapMove(_currentPosition, 16.5);
+    } else {
+      setState(() => _isLoadingGps = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('VIA LUCA solo opera dentro de la Región de Ica.'),
+          ),
+        );
+      }
+    }
   }
 
   void _openSearchScreen() async {
@@ -109,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _destinationName = result['name'] as String;
       });
 
-      _mapController.move(_destinationPosition!, 15.5);
+      _animatedMapMove(_destinationPosition!, 15.5);
     }
   }
 
@@ -132,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Gianfranco',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              accountEmail: const Text('Pasajero VIP'),
+              accountEmail: const Text('Pasajero VIP - Ica'),
               currentAccountPicture: const CircleAvatar(
                 backgroundColor: Colors.white,
                 child: Text(
@@ -171,17 +222,19 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Stack(
         children: [
-          // Mapa Interactivo CartoDB Voyager
+          // Mapa OpenStreetMap Limpio (Sin marcas de agua) + Bloqueo regional en Ica
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _currentPosition,
               initialZoom: 16.5,
+              maxZoom: 18.0,
+              minZoom: 10.0,
+              cameraConstraint: CameraConstraint.contain(bounds: _icaBounds),
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.via_luca',
               ),
 
@@ -198,34 +251,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
               MarkerLayer(
                 markers: [
-                  // Origen - Calibrado con centro exacto
                   Marker(
                     point: _currentPosition,
-                    width: 44,
-                    height: 44,
+                    width: 50,
+                    height: 50,
                     alignment: Alignment.center,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
                         Container(
-                          width: 44,
-                          height: 44,
+                          width: 48,
+                          height: 48,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: const Color(0xFF0F62FE).withOpacity(0.25),
+                            color: const Color(0xFF0F62FE).withOpacity(0.2),
                           ),
                         ),
                         Container(
-                          width: 18,
-                          height: 18,
+                          width: 20,
+                          height: 20,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: const Color(0xFF0F62FE),
-                            border: Border.all(color: Colors.white, width: 3),
+                            border: Border.all(color: Colors.white, width: 3.5),
                             boxShadow: const [
                               BoxShadow(
                                 color: Colors.black26,
-                                blurRadius: 4,
+                                blurRadius: 8,
+                                offset: Offset(0, 3),
                               )
                             ],
                           ),
@@ -234,17 +287,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Destino - Alineado desde la punta inferior (topCenter)
                   if (_destinationPosition != null)
                     Marker(
                       point: _destinationPosition!,
-                      width: 40,
-                      height: 40,
+                      width: 44,
+                      height: 44,
                       alignment: Alignment.topCenter,
-                      child: const Icon(
-                        Icons.location_on,
-                        color: Color(0xFFE53935),
-                        size: 40,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black38,
+                              blurRadius: 10,
+                              offset: Offset(0, 4),
+                            )
+                          ],
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Icon(
+                            Icons.navigation_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -252,11 +320,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          // Indicador de carga de GPS
           if (_isLoadingGps)
             Positioned(
               top: 100,
-              left: MediaQuery.of(context).size.width / 2 - 80,
+              left: MediaQuery.of(context).size.width / 2 - 75,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
@@ -276,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     SizedBox(width: 10),
                     Text(
-                      'Obteniendo GPS...',
+                      'Ubicando GPS...',
                       style: TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ],
@@ -284,7 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-          // Barra Superior Flotante
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -297,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black12,
-                        blurRadius: 10,
+                        blurRadius: 12,
                         offset: Offset(0, 4),
                       )
                     ],
@@ -326,13 +392,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Botón Mi Ubicación / Recalibrar GPS
           Positioned(
             right: 16,
             bottom: 210,
             child: FloatingActionButton(
               heroTag: 'gps_btn',
-              onPressed: _recenterMap,
+              onPressed: () => _animatedMapMove(_currentPosition, 16.5),
               backgroundColor: Colors.white,
               elevation: 4,
               shape: const CircleBorder(),
@@ -340,7 +405,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Tarjeta Inferior de Destino
           Positioned(
             left: 16,
             right: 16,
@@ -456,7 +520,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Pantalla de Búsqueda
+// Pantalla de Búsqueda enfocada exclusivamente en Ica
 class DestinationSearchScreen extends StatefulWidget {
   final LatLng userPosition;
   const DestinationSearchScreen({super.key, required this.userPosition});
@@ -485,8 +549,9 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
     });
 
     try {
+      // Se limita la búsqueda con viewbox a la Región de Ica (&bounded=1)
       final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/search?format=json&q=$query&limit=6&addressdetails=1',
+        'https://nominatim.openstreetmap.org/search?format=json&q=$query, Ica, Peru&viewbox=-76.5,-13.0,-74.7,-15.6&bounded=1&limit=8&addressdetails=1',
       );
       final response = await http.get(url, headers: {
         'User-Agent': 'VIA_LUCA_App',
@@ -515,7 +580,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('¿A dónde vas?'),
+        title: const Text('¿A dónde vas en Ica?'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
@@ -532,7 +597,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Mi ubicación actual',
+                        'Mi ubicación actual (Ica)',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -559,7 +624,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
                             },
                           )
                         : null,
-                    hintText: 'Buscar calle, avenida o lugar...',
+                    hintText: 'Buscar lugar o calle en Ica...',
                     filled: true,
                     fillColor: const Color(0xFFF4F4F4),
                     contentPadding: const EdgeInsets.symmetric(
@@ -617,7 +682,7 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
   }
 }
 
-// Widget del Logo Vectorial
+// Isotipo y Logo Vectorial
 class ViaLucaLogo extends StatelessWidget {
   final double size;
   final bool showText;
