@@ -62,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _destinationName = result['name'] as String;
       });
 
-      // Ajustar cámara para ver ambos puntos si hay destino
       _mapController.move(_destinationPosition!, 15.0);
     }
   }
@@ -125,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Stack(
         children: [
-          // Mapa con Capa de CartoDB (Estilo limpio / profesional)
+          // Mapa Interactivo CartoDB Voyager
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -139,7 +138,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 userAgentPackageName: 'com.example.via_luca',
               ),
 
-              // Trazo de línea entre Origen y Destino
               if (_destinationPosition != null)
                 PolylineLayer(
                   polylines: [
@@ -151,10 +149,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
 
-              // Marcadores Elegantes
               MarkerLayer(
                 markers: [
-                  // Origen (Pulso azul elegante)
+                  // Origen (Pulso azul)
                   Marker(
                     point: _currentPosition,
                     width: 60,
@@ -189,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // Destino (Pin rojo moderno con elevación)
+                  // Destino (Pin rojo)
                   if (_destinationPosition != null)
                     Marker(
                       point: _destinationPosition!,
@@ -223,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          // Barra Superior Flotante
+          // Barra Superior Flotante con Logo Vectorial
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -248,15 +245,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         onPressed: () => Scaffold.of(context).openDrawer(),
                       ),
                       const Expanded(
-                        child: Text(
-                          'VIA LUCA',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.extrabold,
-                            color: Color(0xFF0F62FE),
-                            letterSpacing: 1.1,
-                          ),
+                        child: Center(
+                          child: ViaLucaLogo(size: 28, showText: true),
                         ),
                       ),
                       const CircleAvatar(
@@ -272,7 +262,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Botón Recentrar GPS Flotante
+          // Botón GPS
           Positioned(
             right: 16,
             bottom: 210,
@@ -286,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Tarjeta de Búsqueda de Destino
+          // Tarjeta Inferior de Destino
           Positioned(
             left: 16,
             right: 16,
@@ -307,7 +297,6 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Barra de Búsqueda Flotante
                   InkWell(
                     onTap: _openSearchScreen,
                     borderRadius: BorderRadius.circular(16),
@@ -343,7 +332,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Botones Rápidos (Casa / Trabajo)
                   Row(
                     children: [
                       Expanded(
@@ -405,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Pantalla de Búsqueda de Destinos con Nominatim / OpenStreetMap
+// Pantalla de Búsqueda
 class DestinationSearchScreen extends StatefulWidget {
   final LatLng userPosition;
   const DestinationSearchScreen({super.key, required this.userPosition});
@@ -564,4 +552,101 @@ class _DestinationSearchScreenState extends State<DestinationSearchScreen> {
       ),
     );
   }
+}
+
+// Widget del Logo Vectorial
+class ViaLucaLogo extends StatelessWidget {
+  final double size;
+  final bool showText;
+  final Color textColor;
+
+  const ViaLucaLogo({
+    super.key,
+    this.size = 28.0,
+    this.showText = true,
+    this.textColor = const Color(0xFF001141),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: size,
+          height: size,
+          child: CustomPaint(
+            painter: _ViaLucaIconPainter(),
+          ),
+        ),
+        if (showText) ...[
+          const SizedBox(width: 8),
+          RichText(
+            text: TextSpan(
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: size * 0.65,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: textColor,
+              ),
+              children: const [
+                TextSpan(text: 'VIA '),
+                TextSpan(
+                  text: 'LUCA',
+                  style: TextStyle(
+                    color: Color(0xFF0F62FE),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ViaLucaIconPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double w = size.width;
+    final double h = size.height;
+
+    final Paint mainPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF00D2FF),
+          Color(0xFF0F62FE),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, w, h))
+      ..style = PaintingStyle.fill;
+
+    final Path logoPath = Path();
+    logoPath.moveTo(w * 0.5, h * 0.05);
+    logoPath.cubicTo(w * 0.85, h * 0.05, w * 0.95, h * 0.45, w * 0.5, h * 0.95);
+    logoPath.cubicTo(w * 0.05, h * 0.45, w * 0.15, h * 0.05, w * 0.5, h * 0.05);
+    logoPath.close();
+
+    canvas.drawPath(logoPath, mainPaint);
+
+    final Paint innerCutPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final Path innerCutPath = Path();
+    innerCutPath.moveTo(w * 0.5, h * 0.28);
+    innerCutPath.lineTo(w * 0.65, h * 0.48);
+    innerCutPath.lineTo(w * 0.5, h * 0.68);
+    innerCutPath.lineTo(w * 0.35, h * 0.48);
+    innerCutPath.close();
+
+    canvas.drawPath(innerCutPath, innerCutPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
