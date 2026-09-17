@@ -796,7 +796,6 @@ class ViaLucaLogo extends StatelessWidget {
   final Color textColor;
 
   const ViaLucaLogo({
-    super.size,
     this.size = 28.0,
     this.showText = true,
     this.textColor = const Color(0xFF001141),
