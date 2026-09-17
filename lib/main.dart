@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
-// Base de datos local en memoria para verificar DNIs únicos
 final Map<String, Map<String, String>> _baseDeDatosUsuarios = {};
 
 void main() {
@@ -53,7 +53,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
     final telefono = _telefonoController.text.trim();
 
     if (_esRegistro) {
-      // Validar si el DNI ya existe
       if (_baseDeDatosUsuarios.containsKey(dni)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -64,7 +63,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
         return;
       }
 
-      // Guardar nuevo usuario
       _baseDeDatosUsuarios[dni] = {
         'nombre': nombre,
         'telefono': telefono,
@@ -77,7 +75,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
         ),
       );
     } else {
-      // Iniciar Sesión
       if (!_baseDeDatosUsuarios.containsKey(dni)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -89,7 +86,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
       }
     }
 
-    // Ir al Mapa
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => const Mapa3DScreen()),
     );
@@ -129,7 +125,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Campo DNI
                     TextFormField(
                       controller: _dniController,
                       keyboardType: TextInputType.number,
@@ -149,7 +144,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
                     const SizedBox(height: 10),
 
                     if (_esRegistro) ...[
-                      // Campo Nombre
                       TextFormField(
                         controller: _nombreController,
                         decoration: const InputDecoration(
@@ -166,7 +160,6 @@ class _LoginRegistroScreenState extends State<LoginRegistroScreen> {
                       ),
                       const SizedBox(height: 15),
 
-                      // Campo Teléfono
                       TextFormField(
                         controller: _telefonoController,
                         keyboardType: TextInputType.phone,
@@ -251,6 +244,9 @@ class _Mapa3DScreenState extends State<Mapa3DScreen> {
   bool _buscando = false;
   String _nombreDestino = '';
 
+  int _vehiculoSeleccionado = 0; // 0: Económico, 1: Confort, 2: Mototaxi
+  String _metodoPago = 'Efectivo';
+
   void _onMapCreated(MapLibreMapController controller) {
     _controller = controller;
     _verificarYActivarGPS();
@@ -291,6 +287,41 @@ class _Mapa3DScreenState extends State<Mapa3DScreen> {
         );
       }
     });
+  }
+
+  double _calcularDistanciaEnKm(LatLng p1, LatLng p2) {
+    const double p = 0.017453292519943295;
+    final a = 0.5 -
+        cos((p2.latitude - p1.latitude) * p) / 2 +
+        cos(p1.latitude * p) *
+            cos(p2.latitude * p) *
+            (1 - cos((p2.longitude - p1.longitude) * p)) /
+            2;
+    return 12742 * asin(sqrt(a));
+  }
+
+  double _calcularTarifa(double distanciaKm, int tipoVehiculo) {
+    double tarifaBase;
+    double precioKm;
+
+    switch (tipoVehiculo) {
+      case 1: // Confort
+        tarifaBase = 6.0;
+        precioKm = 2.2;
+        break;
+      case 2: // Mototaxi
+        tarifaBase = 3.0;
+        precioKm = 1.0;
+        break;
+      case 0: // Económico
+      default:
+        tarifaBase = 4.0;
+        precioKm = 1.5;
+        break;
+    }
+
+    double total = tarifaBase + (distanciaKm * precioKm);
+    return total < tarifaBase ? tarifaBase : double.parse(total.toStringAsFixed(1));
   }
 
   Future<void> _buscarDireccion(String query) async {
@@ -349,6 +380,10 @@ class _Mapa3DScreenState extends State<Mapa3DScreen> {
 
   @override
   Widget build(BuildContext context) {
+    double distanciaKm = _posicionDestino != null
+        ? _calcularDistanciaEnKm(_posicionOrigen, _posicionDestino!)
+        : 0.0;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -436,68 +471,117 @@ class _Mapa3DScreenState extends State<Mapa3DScreen> {
             ),
           ),
 
+          // Panel Inferior de Selección de Tarifas
           if (_posicionDestino != null)
             Positioned(
-              bottom: 20,
-              left: 16,
-              right: 16,
-              child: Card(
-                elevation: 8,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.pin_drop, color: Colors.red, size: 28),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Destino Seleccionado',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
-                                ),
-                                Text(
-                                  _nombreDestino,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amber,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Siguiente paso: Seleccionar tipo de taxi y tarifa')),
-                            );
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(20.0),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Distancia estimada: ${distanciaKm.toStringAsFixed(2)} km',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Selector de Vehículo
+                    Row(
+                      children: [
+                        _opcionVehiculo(0, 'Económico', Icons.directions_car, _calcularTarifa(distanciaKm, 0)),
+                        const SizedBox(width: 8),
+                        _opcionVehiculo(1, 'Confort', Icons.local_taxi, _calcularTarifa(distanciaKm, 1)),
+                        const SizedBox(width: 8),
+                        _opcionVehiculo(2, 'Moto', Icons.two_wheeler, _calcularTarifa(distanciaKm, 2)),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Selector Método de Pago
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Método de pago:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        DropdownButton<String>(
+                          value: _metodoPago,
+                          items: <String>['Efectivo', 'Yape / Plin', 'Tarjeta']
+                              .map((String value) => DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(value),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => _metodoPago = val);
                           },
-                          child: const Text(
-                            'Confirmar Destino',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Botón Pedir Taxi
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amber,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: Colors.green,
+                              content: Text('Buscando conductor cercano ($_metodoPago)...'),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'PEDIR VIA LUCA - S/ ${_calcularTarifa(distanciaKm, _vehiculoSeleccionado)}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _opcionVehiculo(int index, String titulo, IconData icono, double precio) {
+    bool seleccionado = _vehiculoSeleccionado == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _vehiculoSeleccionado = index),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: seleccionado ? Colors.amber[100] : Colors.grey[100],
+            border: Border.all(color: seleccionado ? Colors.amber : Colors.grey[300]!, width: 2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              Icon(icono, color: seleccionado ? Colors.amber[900] : Colors.grey[600]),
+              const SizedBox(height: 4),
+              Text(titulo, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              Text('S/ $precio', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.green)),
+            ],
+          ),
+        ),
       ),
     );
   }
